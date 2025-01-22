@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR Payment Generator</title>
+    
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f6f9;
+            color: #333;
+        }
+
+        .container {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            max-width: 1200px;
+            margin: 40px auto;
+            gap: 20px;
+        }
+
+        #payment-form,
+        #qr-result {
+            width: 48%;
+            background: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        #payment-form {
+            border-left: 5px solid #007bff;
+        }
+
+        #qr-result {
+            width: 48%;
+            text-align: center;
+            border-left: 5px solid #28a745;
+        }
+
+        #paid-qr-code {
+            width: 100%;
+            /* Đảm bảo hình ảnh luôn vừa khung */
+            height: 447px;
+            object-fit: contain;
+            /* Đảm bảo hình ảnh không bị méo */
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        select,
+        input {
+            width: 100%;
+            padding: 12px;
+            font-size: 14px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            font-size: 16px;
+            color: #fff;
+            background-color: #007bff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            font-weight: bold;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        .qr-container img {
+            max-width: 100%;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+        }
+
+        .d-none {
+            display: none;
+        }
+
+        .info-box {
+            background: #f8f9fa;
+            padding: 10px 15px;
+            border-radius: 5px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+        }
+
+        .info-box strong {
+            color: #555;
+        }
+
+        .input-wrapper {
+            position: relative;
+            display: inline-block;
+            width: 100%;
+        }
+
+        #amount {
+            padding-right: 50px;
+            /* Chừa khoảng trống để không bị chữ "VND" che */
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .unit {
+            position: absolute;
+            top: 50%;
+            right: 10px;
+            /* Đặt chữ "VND" sát mép phải */
+            transform: translateY(-50%);
+            color: gray;
+            /* Màu mờ */
+            pointer-events: none;
+            /* Không cho tương tác */
+            font-size: 14px;
+        }
+    </style>
+</head>
+
+<body>
+    <div style="display: flex; justify-content: center;">
+        <h1>HỆ THỐNG TẠO THÔNG TIN THANH TOÁN BẰNG MÃ QR</h1>
+    </div>
+
+    <div class="container">
+        <form id="payment-form">
+            <h2>Nhập thông tin tạo QR</h2>
+            <div class="form-group">
+                <label for="bank-id">Ngân hàng</label>
+                <select id="bank-id">
+                    <option value="">-- Chọn ngân hàng --</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="accountno">Số tài khoản</label>
+                <input type="text" id="accountno" placeholder="Nhập số tài khoản" required>
+            </div>
+            <div class="form-group">
+                <label for="accountname">Tên tài khoản</label>
+                <input type="text" id="accountname" placeholder="Nhập tên chủ tài khoản" required>
+            </div>
+            <div class="form-group">
+                <label for="amount">Số tiền chuyển khoản</label>
+                <div class="input-wrapper">
+                    <input type="text" id="amount" placeholder="Nhập số tiền chuyển khoản" required />
+                    <span class="unit">VND</span>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="content">Nội dung chuyển khoản</label>
+                <input type="text" id="content" placeholder="Nhập nội dung chuyển khoản" required>
+            </div>
+            <button type="button" id="generate-qr" style="font-weight: bold">Tạo mã QR Code</button>
+        </form>
+        <div id="qr-result" class="d-none">
+            <div class="qr-container">
+                <img id="paid-qr-code" alt="QR Code">
+            </div>
+            <div style="margin-top: 20px; display: flex; justify-content: space-between; gap: 10px; ">
+                <button id="copy-qr-image">Sao chép mã QR</button>
+                <button id="download-qr">Tải mã QR</button>
+            </div>
+        </div>
+    </div>
+    <script>
+        // Hàm loại bỏ dấu tiếng Việt
+        function removeVietnameseTones(str) {
+            return str
+                .normalize('NFD') // Chuẩn hóa Unicode
+                .replace(/[\u0300-\u036f]/g, '') // Loại bỏ dấu
+                .replace(/đ/g, 'd') // Thay "đ" thành "d"
+                .replace(/Đ/g, 'D') // Thay "Đ" thành "D";
+        }
+
+        // Xử lý cho accountno
+        const accountNoInput = document.getElementById('accountno');
+        accountNoInput.addEventListener('input', () => {
+            let value = accountNoInput.value;
+
+            // Loại bỏ dấu, khoảng cách, và chuyển thành in hoa
+            value = removeVietnameseTones(value).replace(/\s+/g, '').toUpperCase();
+
+            // Gán lại giá trị
+            accountNoInput.value = value;
+        });
+
+        // Xử lý cho accountname
+        const accountNameInput = document.getElementById('accountname');
+        accountNameInput.addEventListener('input', () => {
+            let value = accountNameInput.value;
+
+            // Loại bỏ dấu, số, và chuyển thành in hoa
+            value = removeVietnameseTones(value).replace(/[^a-zA-Z\s]/g, '').toUpperCase();
+
+            // Gán lại giá trị
+            accountNameInput.value = value;
+        });
+
+        // Xử lý cho amount
+        const amountInput = document.getElementById('amount');
+        amountInput.addEventListener('input', () => {
+            let value = amountInput.value;
+
+            // Loại bỏ các ký tự không phải số và dấu phẩy
+            value = value.replace(/[^0-9]/g, '');
+
+            // Định dạng lại số với dấu phẩy
+            value = new Intl.NumberFormat('en-US').format(value);
+
+            // Gán lại giá trị
+            amountInput.value = value;
+        });
+        const banks = [
+            { id: "970415", name: "VietinBank - Ngân hàng TMCP Công thương Việt Nam", logo: "https://api.vietqr.io/img/ICB.png" },
+            { id: "970436", name: "Vietcombank - Ngân hàng TMCP Ngoại Thương Việt Nam", logo: "https://api.vietqr.io/img/VCB.png" },
+            { id: "970418", name: "BIDV - Ngân hàng TMCP Đầu tư và Phát triển Việt Nam", logo: "https://api.vietqr.io/img/BIDV.png" },
+            { id: "970405", name: "Agribank - Ngân hàng Nông nghiệp và Phát triển Nông thôn Việt Nam", logo: "https://api.vietqr.io/img/VBA.png" },
+            { id: "970407", name: "Techcombank - Ngân hàng TMCP Kỹ Thương Việt Nam", logo: "https://api.vietqr.io/img/TCB.png" },
+            { id: "970422", name: "MB Bank - Ngân hàng TMCP Quân đội", logo: "https://api.vietqr.io/img/MB.png" },
+            { id: "970448", name: "OCB - Ngân hàng TMCP Phương Đông", logo: "https://api.vietqr.io/img/OCB.png" },
+            { id: "970416", name: "ACB - Ngân hàng TMCP Á Châu", logo: "https://api.vietqr.io/img/ACB.png" },
+            { id: "970432", name: "VPBank - Ngân hàng TMCP Việt Nam Thịnh Vượng", logo: "https://api.vietqr.io/img/VPB.png" },
+            { id: "970423", name: "TPBank - Ngân hàng TMCP Tiên Phong", logo: "https://api.vietqr.io/img/TPB.png" },
+            { id: "970403", name: "Sacombank - Ngân hàng TMCP Sài Gòn Thương Tín", logo: "https://api.vietqr.io/img/STB.png" },
+            { id: "970437", name: "HDBank - Ngân hàng TMCP Phát triển TP.HCM", logo: "https://api.vietqr.io/img/HDB.png" },
+            { id: "970454", name: "Viet Capital Bank - Ngân hàng TMCP Bản Việt", logo: "https://api.vietqr.io/img/VCCB.png" },
+            { id: "970439", name: "Public Bank - Ngân hàng TNHH MTV Public Việt Nam", logo: "https://api.vietqr.io/img/PBVN.png" },
+            { id: "970429", name: "SCB - Ngân hàng TMCP Sài Gòn", logo: "https://api.vietqr.io/img/SCB.png" },
+            { id: "970441", name: "VIB - Ngân hàng TMCP Quốc tế Việt Nam", logo: "https://api.vietqr.io/img/VIB.png" },
+            { id: "970443", name: "SHB - Ngân hàng TMCP Sài Gòn - Hà Nội", logo: "https://api.vietqr.io/img/SHB.png" },
+            { id: "970438", name: "Bao Viet Bank - Ngân hàng TMCP Bảo Việt", logo: "https://api.vietqr.io/img/BVB.png" },
+            { id: "970446", name: "Co-op Bank - Ngân hàng Hợp tác xã Việt Nam", logo: "https://api.vietqr.io/img/COOPBANK.png" },
+            { id: "970405", name: "Agribank - Ngân hàng Nông nghiệp và Phát triển Nông thôn", logo: "https://api.vietqr.io/img/VBA.png" },
+            { id: "970457", name: "Woori Bank - Ngân hàng TNHH MTV Woori Việt Nam", logo: "https://api.vietqr.io/img/WVN.png" },
+            { id: "970421", name: "VRB - Ngân hàng Liên doanh Việt Nga", logo: "https://api.vietqr.io/img/VRB.png" },
+            { id: "970458", name: "UOB - Ngân hàng United Overseas", logo: "https://api.vietqr.io/img/UOB.png" },
+            { id: "970410", name: "Standard Chartered Bank - Ngân hàng TNHH MTV Standard Chartered Bank Việt Nam", logo: "https://api.vietqr.io/img/SCVN.png" },
+            { id: "970434", name: "Indovina Bank - Ngân hàng TNHH Indovina", logo: "https://api.vietqr.io/img/IVB.png" },
+            { id: "970456", name: "IBK - Ngân hàng Công nghiệp Hàn Quốc", logo: "https://api.vietqr.io/img/IBK.png" },
+            { id: "970455", name: "HSBC - Ngân hàng TNHH MTV HSBC", logo: "https://api.vietqr.io/img/HSBC.png" },
+            { id: "970442", name: "Hong Leong Bank - Ngân hàng TNHH MTV Hong Leong", logo: "https://api.vietqr.io/img/HLBVN.png" },
+            { id: "970406", name: "DongA Bank - Ngân hàng TMCP Đông Á", logo: "https://api.vietqr.io/img/DOB.png" },
+            // Add all bank information here with id, name, and logo
+        ];
+        const bankSelect = document.getElementById('bank-id');
+        banks.forEach(bank => {
+            const option = document.createElement('option');
+            option.value = bank.id;
+            option.textContent = bank.name;
+            bankSelect.appendChild(option);
+        });
+
+        document.getElementById('generate-qr').addEventListener('click', function () {
+            const bankId = document.getElementById('bank-id').value;
+            const accountNo = document.getElementById('accountno').value;
+            const accountName = document.getElementById('accountname').value;
+            const rawAmount = document.getElementById('amount').value; // Giá trị nhập vào từ người dùng
+            const amount = rawAmount.replace(/,/g, ''); // Loại bỏ mọi dấu phẩy
+            const content = document.getElementById('content').value;
+
+            if (!bankId || !accountNo || !accountName || !amount) {
+                alert('Please fill in all fields');
+                return;
+            }
+
+            const encodedAccountName = encodeURIComponent(accountName);
+            const encodedContent = encodeURIComponent(content);
+
+            const qrUrl = `https://img.vietqr.io/image/${bankId}-${accountNo}-compact2.jpg?amount=${amount}&addInfo=${encodedContent}&accountName=${encodedAccountName}`;
+            document.getElementById('qr-result').classList.remove('d-none');
+            document.getElementById('paid-qr-code').src = qrUrl;
+            document.getElementById('paid-accountname').textContent = accountName;
+            document.getElementById('paid-accountno').textContent = accountNo;
+            document.getElementById('paid-price').textContent = amount;
+            document.getElementById('paid-content').textContent = content;
+        });
+
+        document.getElementById('download-qr').addEventListener('click', function () {
+            const qrImage = document.getElementById('paid-qr-code');
+            const link = document.createElement('a');
+            link.href = qrImage.src; // Đường dẫn của hình ảnh
+            link.download = 'qr-code.png'; // Tên file tải xuống
+            link.click(); // Kích hoạt tải file
+        });
+
+
+        document.getElementById('copy-qr-image').addEventListener('click', async function () {
+    try {
+        const qrImage = document.getElementById('paid-qr-code');
+        
+        // Tạo canvas để vẽ hình ảnh
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        canvas.width = qrImage.naturalWidth;
+        canvas.height = qrImage.naturalHeight;
+        context.drawImage(qrImage, 0, 0);
+
+        // Chuyển canvas thành Base64
+        const dataURL = canvas.toDataURL('image/png');
+
+        // Chuyển Base64 thành Blob
+        const response = await fetch(dataURL);
+        const blob = await response.blob();
+
+        // Tạo ClipboardItem và sao chép vào clipboard
+        const clipboardItem = new ClipboardItem({ 'image/png': blob });
+        await navigator.clipboard.write([clipboardItem]);
+
+        alert('Hình ảnh mã QR đã được sao chép vào clipboard!');
+    } catch (err) {
+        console.error('Lỗi sao chép hình ảnh:', err);
+        alert('Không thể sao chép hình ảnh. Vui lòng thử  trình duyệt khác.');
+    }
+});
+
+
+
+    </script>
+</body>
+
+</html>
